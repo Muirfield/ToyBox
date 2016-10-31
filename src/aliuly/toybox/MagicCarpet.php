@@ -17,6 +17,8 @@ use pocketmine\event\player\PlayerMoveEvent;
 use pocketmine\event\player\PlayerKickEvent;
 use pocketmine\event\player\PlayerQuitEvent;
 use pocketmine\event\entity\EntityTeleportEvent;
+use pocketmine\network\Network;
+use aliuly\toybox\common\mc;
 
 class MagicCarpet extends BaseCommand implements Listener {
 	protected $block;
@@ -24,8 +26,8 @@ class MagicCarpet extends BaseCommand implements Listener {
 	public function __construct($owner,$bl) {
 		parent::__construct($owner);
 		$this->enableCmd("magiccarpet",
-							  ["description" => "Fly with a magic carpet",
-								"usage" => "/magiccarpet",
+							  ["description" => mc::_("Fly with a magic carpet"),
+								"usage" => mc::_("/magiccarpet"),
 								"aliases" => ["mc"],
 								"permission" => "toybox.magiccarpet"]);
 		$this->owner->getServer()->getPluginManager()->registerEvents($this,$this->owner);
@@ -52,26 +54,37 @@ class MagicCarpet extends BaseCommand implements Listener {
 		if ($state) {
 			$this->deSpawn($sender,$state[1]);
 			$this->unsetState($sender);
-			$sender->sendMessage("The magic carpet disappears");
+			$sender->sendMessage(mc::_("The magic carpet disappears"));
 		} else {
 			$state = $this->setState($sender,[ $size, []]);
 			$this->carpet($sender);
-			$sender->sendMessage("A magic carpet of size $size\nappears below your feet.");
+			$sender->sendMessage(mc::_("A magic carpet of size %1%\nappears below your feet.",$size));
 		}
 		return true;
 	}
 	private function deSpawn(Player $pl,array &$blocks) {
 		$l = $pl->getLevel();
-		foreach($blocks as $i=>$block){
-			list($x,$y,$z)=array_map("intval", explode(".", $i));
-			$pk = new UpdateBlockPacket();
-			$pk->x = $x;
-			$pk->y = $y;
-			$pk->z = $z;
-			$pk->block = $block->getId();
-			$pk->meta = $block->getDamage();
-			Server::broadcastPacket($l->getUsingChunk($pk->x >> 4,$pk->z >> 4),
-											$pk);
+		if (version_compare($this->owner->getServer()->getApiVersion(),"1.12.0") >= 0) {
+			$sndblks = [];
+			foreach($blocks as $i=>$block){
+				list($x,$y,$z)=array_map("intval", explode(":", $i));
+				$sndblks[] = Block::get($block->getId(),$block->getDamage(),
+												new Position($x,$y,$z,$l));
+			}
+			$l->sendBlocks($l->getChunkPlayers($pl->getX()>>4,$pl->getZ()>>4),
+								$sndblks, UpdateBlockPacket::FLAG_ALL_PRIORITY);
+		} else {
+			foreach($blocks as $i=>$block){
+				list($x,$y,$z)=array_map("intval", explode(":", $i));
+				$pk = new UpdateBlockPacket();
+				$pk->x = $x;
+				$pk->y = $y;
+				$pk->z = $z;
+				$pk->block = $block->getId();
+				$pk->meta = $block->getDamage();
+				Server::broadcastPacket($l->getUsingChunk($pk->x >> 4,$pk->z >> 4),
+												$pk);
+			}
 		}
 	}
 	private function carpet(Player $pl) {
@@ -88,7 +101,7 @@ class MagicCarpet extends BaseCommand implements Listener {
 		$l = $pl->getLevel();
 		for($x=$startX; $x<$endX;++$x) {
 			for($z=$startZ;$z<$endZ;++$z) {
-				$i = "$x.$y.$z";
+				$i = "$x:$y:$z";
 				if(isset($blocks[$i])){
 					$newBlocks[$i] = $blocks[$i];
 					unset($blocks[$i]);
@@ -140,7 +153,7 @@ class MagicCarpet extends BaseCommand implements Listener {
 		if ($state) {
 			$this->deSpawn($pl,$state[1]);
 			$this->unsetState($pl);
-			$pl->sendMessage("Magic carpet lost due to teleport!");
+			$pl->sendMessage(mc::_("Magic carpet lost due to teleport!"));
 		}
 
 	}
